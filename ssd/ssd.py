@@ -18,19 +18,24 @@ if not ALGO_VERSION:
 
 
 def predict(image: Image):
-    feature_extractor = AutoFeatureExtractor.from_pretrained(ALGO_VERSION)
-    model = DetrForObjectDetection.from_pretrained(ALGO_VERSION)
+    ssd_model = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd')
+    utils = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd_processing_utils')
 
-    inputs = feature_extractor(image, return_tensors="pt")
+    ssd_model.to('cuda')
+    ssd_model.eval()
+
+    inputs = utils.prepare_input(image)
+    tensor = utils.prepare_tensor(inputs)
 
     with torch.no_grad():
-        output = model(**inputs)
+        detections_batch = ssd_model(tensor)
 
-    # Convert output to be between 0 and 1
-    sizes = torch.tensor([tuple(reversed(image.size))])
-    result = feature_extractor.post_process(output, sizes)
+    results_per_input = utils.decode_results(detections_batch)
+    best_results_per_input = [utils.pick_best(results, 0.40) for results in results_per_input]
+
+    labels = utils.get_coco_object_dictionary()
     
-    return result[0]
+    return labels, best_results_per_input[0]
 
 
 class RosIO(Node):
@@ -65,31 +70,37 @@ class RosIO(Node):
         )
 
     def get_detection_arr(self, result):
+
+        bboxes, classes, confidences = result
+        
         dda = Detection2DArray()
 
         detections = []
         self.counter += 1
 
-        for i in range(len(result['boxes'])):
+        for i in range(len(bboxes)):
+            left, bot, right, top = bboxes[i]
+            x, y, w, h = [val * 300 for val in [left, bot, right - left, top - bot]]
+
             detection = Detection2D()
 
             detection.header.stamp = self.get_clock().now().to_msg()
             detection.header.frame_id = str(self.counter)
 
             hypothesis = ObjectHypothesisWithPose()
-            hypothesis.id = result['labels'][i].item()
-            hypothesis.score = result['scores'][i].item()
-            hypothesis.pose.pose.position.x = result['boxes'][i][0].item()
-            hypothesis.pose.pose.position.y = result['boxes'][i][1].item()
+            hypothesis.id = classes[i]
+            hypothesis.score = confidences[i]
+            hypothesis.pose.pose.position.x = x
+            hypothesis.pose.pose.position.y = y
 
             detection.results = [hypothesis]
 
-            detection.bbox.center.x = result['boxes'][i][0].item()
-            detection.bbox.center.y = result['boxes'][i][1].item()
+            detection.bbox.center.x = x
+            detection.bbox.center.y = y
             detection.bbox.center.theta = 0.0
 
-            detection.bbox.size_x = result['boxes'][i][2].item()
-            detection.bbox.size_y = result['boxes'][i][3].item()
+            detection.bbox.size_x = w
+            detection.bbox.size_y = h
 
             detections.append(detection)
     
@@ -104,22 +115,23 @@ class RosIO(Node):
         bridge = CvBridge()
         cv_image: numpy.ndarray = bridge.imgmsg_to_cv2(msg)
         converted_image = PilImage.fromarray(numpy.uint8(cv_image), 'RGB')
-        result = predict(converted_image)
+        labels, result = predict(converted_image)
+        bboxes, classes, confidences = result
         print(f'Predicted Bounding Boxes')
 
         if self.get_parameter('pub_image').value:
-            for box in result['boxes'].tolist():
-                x = result['boxes'][0]
-                y = result['boxes'][1]
-                w = result['boxes'][2]
-                h = result['boxes'][3]
+            for i in range(len(bboxes)):
+                left, bot, right, top = bboxes[i]
+                x, y, w, h = [val * 300 for val in [left, bot, right - left, top - bot]]
                 converted_image = cv2.rectangle(converted_image, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            self.image_publisher.publish(bridge.cv2_to_imgmsg(converted_image)
+            self.image_publisher.publish(bridge.cv2_to_imgmsg(converted_image))
 
         if self.get_parameter('pub_detections').value:
-            labels: torch.Tensor = result['labels']
-            detections = ' '.join(labels.tolist())
-            self.detection_publisher.publish()
+            result = []
+            for label in classes:
+                result.append(labels[label - 1])
+            detections = ' '.join(result)
+            self.detection_publisher.publish(detections)
 
         if self.get_parameter('pub_boxes').value:
             arr = self.get_detection_arr(result)
