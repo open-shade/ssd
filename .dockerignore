@@ -1,0 +1,7 @@
+venv
+Dockerfile
+.gitignore
+cloudbuild.sh
+cloudbuild.yaml
+docker.sh
+.gcloudignore
