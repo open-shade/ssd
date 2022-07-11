@@ -11,11 +11,6 @@ from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithP
 from std_msgs.msg import String
 from cv_bridge import CvBridge
 
-ALGO_VERSION = os.getenv("MODEL_NAME")
-
-if not ALGO_VERSION:
-    ALGO_VERSION = '<default here>'
-
 
 def predict(image: Image):
     ssd_model = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd')
@@ -46,26 +41,26 @@ class RosIO(Node):
         self.declare_parameter('pub_detections', True)
         self.image_subscription = self.create_subscription(
             Image,
-            '/<name>/sub/image_raw',
+            '/ssd/image_raw',
             self.listener_callback,
             10
         )
 
         self.image_publisher = self.create_publisher(
             Image,
-            '/<name>/pub/image',
+            '/ssd/image',
             1
         )
 
         self.detection_publisher = self.create_publisher(
             String,
-            '/<name>/pub/detections',
+            '/ssd/detections',
             1
         )
     
         self.boxes_publisher = self.create_publisher(
             String,
-            '/<name>/pub/detection_boxes',
+            '/ssd/detection_boxes',
             1
         )
 
@@ -141,7 +136,7 @@ class RosIO(Node):
 
 
 def main(args=None):
-    print('<name> Started')
+    print('Single Shot Detection Started')
 
     rclpy.init(args=args)
 
