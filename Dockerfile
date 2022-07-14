@@ -24,7 +24,7 @@ COPY . ./src/ssd
 
 RUN pip3 install ./src/ssd && \
     : "Install the model" && \
-    python3 -c "impot torch; ssd_model = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd')" && \
+    python3 -c "import torch; ssd_model = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd')" && \
     colcon build
 
 ENTRYPOINT ["/home/shade/shade_ws/start.sh"]
