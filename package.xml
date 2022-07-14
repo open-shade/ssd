@@ -3,9 +3,11 @@
 <package format="3">
   <name>ssd</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Single Shot Detection (SSD) discretizes the output space of bounding boxes into a set of default boxes over different 
+  aspect ratios and scales per feature map location. At prediction time, the network generates scores for the presence of each 
+  object category in each default box and produces adjustments to the box to better match the object shape.</description>
   <maintainer email="support@shaderobotics.com">Shade Robotics</maintainer>
-  <license>TODO: License declaration</license>
+  <license>apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
